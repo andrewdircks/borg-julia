@@ -12,7 +12,7 @@ function dtlz2(vars, objs, constrs)::Cvoid
     g = 0
     # i = 2, 3, 4, 5, ... 10
     # iJulia = 3, 4, 5, ... 11
-    for i = (nvars-k+1):nvars
+    for i = (nvars - k + 1):nvars
         g += (vars[i] - 0.5)^2
     end
 
