@@ -42,34 +42,6 @@ function borg(nVars, nObjs, nCons, bounds, epsilons, nfe, julia_problem)::Borg
 end
 
 
-function dtlz2(vars, objs, constrs)::Cvoid 
-  nvars = 11
-  nobjs = 2
-  k = nvars - nobjs + 1
-
-  # load vars
-  vars = [unsafe_load(vars, i) for i = 1:nvars]
-
-  g = 0
-
-  for i = (nvars-k+1):nvars
-      g += (vars[i] - 0.5)^2
-  end
-
-  _objs = [1.0 + g, 1.0 + g]
-  
-  _objs[1] = _objs[1] * cos(0.5 * pi * vars[1])
-  _objs[2] = _objs[2] * sin(0.5 * pi * vars[1])
-
-  # store objs
-  for i = 1:nobjs
-      unsafe_store!(objs, _objs[i], i)
-  end
-
-  # appease function type definition
-  return Cvoid()
-end
-
 # set the bounds to this BORG_Problem reference
 function setBounds(bounds, nvars, ref)
   for i = 0:(nvars-1)
