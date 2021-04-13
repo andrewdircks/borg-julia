@@ -239,3 +239,21 @@ function run(borg::Borg, settings::Dict=Dict())
     return solutions
 end
 
+const mpi_dylib_path = "borg/libborg.so"
+const borgms = "borg/libborgms.so"
+    
+function runMPI(borg::Borg, settings::Dict=Dict())
+    mpi_lib = dlopen(mpi_dylib_path, RTLD_GLOBAL)
+    borg_lib = dlopen(borgms, RTLD_GLOBAL)
+
+    ccall((:BORG_Algorithm_ms_startup, borgms), Cvoid, (Ptr{Cint}, Ptr{Cint}), C_NULL, C_NULL)
+    ccall((:BORG_Algorithm_ms_max_evaluations, borgms), Cvoid, (Int32,), 1000)
+    ref = problem_setup(borg)
+
+    result = ccall((:BORG_Algorithm_ms_run, borgms), Ptr{Cvoid}, (Ptr{Cvoid},), ref)
+    solutions = process(result, borg)
+    println(solutions)
+
+    ccall((:BORG_Algorithm_ms_shutdown, borgms), Cvoid, ())
+end
+
