@@ -33,5 +33,6 @@ end
 bounds = repeat([(0.0, 1.0)], 11)
 epsilons = repeat([0.01], 2)
 test = borg(11, 2, 0, bounds, epsilons, 1000, dtlz2)
-result = run(test)
+settings = Dict("frequency" => 100, "runtimefile" => "test.txt")
+result = run(test, settings)
 print(result)

@@ -1,4 +1,4 @@
-using Libdl
+using Libdl, Dates, Printf
 
 # TODO: make this variable
 const temp = "borg/libborg.so"
@@ -106,6 +106,8 @@ function run(borg::Borg, settings::Dict=Dict())
     # create problem
     ref = problem_setup(borg)
 
+    start = now()
+
     # PM
     pm_f = dlsym(config.lib, :BORG_Operator_PM)
     pm_op = ccall((:BORG_Operator_create), Ptr{Cvoid}, (Cstring, Int32, Int32, Int32, Ptr{Nothing}), "PM", 1, 1, 2, pm_f)
@@ -157,14 +159,72 @@ function run(borg::Borg, settings::Dict=Dict())
     ccall((:BORG_Algorithm_set_operator), Cvoid, (Ptr{Cvoid}, Int32, Ptr{Cvoid}), algorithm, 4, undx_op)
     ccall((:BORG_Algorithm_set_operator), Cvoid, (Ptr{Cvoid}, Int32, Ptr{Cvoid}), algorithm, 5, um_op)
 
-    # actual algorithm run
-    while ccall((:BORG_Algorithm_get_nfe), Int32, (Ptr{Cvoid},), algorithm) < borg.nfe
-        ccall((:BORG_Algorithm_step), Int32, (Ptr{Cvoid},), algorithm)
+    fp = nothing
+    frequency = nothing
+    last_snapshot = nothing
+    write_runtime = false
+    
+    if (haskey(settings, "runtimefile"))
+        fp = open(get(settings, "runtimefile", nothing), "w")
+        frequency = get(settings, "frequency", borg.nVars / 100)
+        last_snapshot = 0
+        write_runtime = true
+    end
+
+
+    # algorithm run
+    while (local evals = ccall((:BORG_Algorithm_get_nfe), Int32, (Ptr{Cvoid},), algorithm)) < borg.nfe
+        ccall((:BORG_Algorithm_step), Cvoid, (Ptr{Cvoid},), algorithm)
+
+        if write_runtime & (evals - last_snapshot >= frequency)
+            entry = Dict()
+            entry["NFE"] = evals
+            entry["ElapsedTime"] = now() - start
+            entry["SBX"] = ccall((:BORG_Operator_get_probability), Cdouble, (Ptr{Cvoid},), sbx_op)
+            entry["DE"] = ccall((:BORG_Operator_get_probability), Cdouble, (Ptr{Cvoid},), de_op)
+            entry["PCX"] = ccall((:BORG_Operator_get_probability), Cdouble, (Ptr{Cvoid},), pcx_op)
+            entry["SPX"] = ccall((:BORG_Operator_get_probability), Cdouble, (Ptr{Cvoid},), spx_op)
+            entry["UNDX"] = ccall((:BORG_Operator_get_probability), Cdouble, (Ptr{Cvoid},), undx_op)
+            entry["UM"] = ccall((:BORG_Operator_get_probability), Cdouble, (Ptr{Cvoid},), um_op)
+            entry["SBX"] = ccall((:BORG_Operator_get_probability), Cdouble, (Ptr{Cvoid},), sbx_op)
+            entry["Improvements"] = ccall((:BORG_Algorithm_get_number_improvements), Int32, (Ptr{Cvoid},), algorithm)
+            entry["Restarts"] = ccall((:BORG_Algorithm_get_number_restarts), Int32, (Ptr{Cvoid},), algorithm)
+            entry["PopulationSize"] = ccall((:BORG_Algorithm_get_population_size), Int32, (Ptr{Cvoid},), algorithm)
+            entry["ArchiveSize"] = ccall((:BORG_Algorithm_get_archive_size), Int32, (Ptr{Cvoid},), algorithm)
+
+            archive = process(ccall((:BORG_Algorithm_get_result), Ptr{Cvoid}, (Ptr{Cvoid},), algorithm), borg)
+            metrics = ["NFE", "ElapsedTime", "SBX", "DE", "PCX", "SPX", "UNDX", "UM", "Improvements", "Restarts", "PopulationSize", "ArchiveSize"]
+
+            for metric in metrics
+                write(fp, "//$metric=$(entry[metric])\n")
+            end
+
+            for sol in archive
+                for var in sol.vars
+                    write(fp, "$var ")
+                end
+                for obj in sol.objs
+                    write(fp, "$obj ")
+                end
+                for constr in sol.constrs
+                    write(fp, "$constr ")
+                end
+                write(fp, "\n")
+            end
+
+
+            last_snapshot = evals
+        end
     end
     
     # process results
     result = ccall((:BORG_Algorithm_get_result), Ptr{Cvoid}, (Ptr{Cvoid},), algorithm)
     solutions = process(result, borg)
+
+    # close file 
+    if (fp != nothing)
+        close(fp)
+    end
 
     # free memory
     ccall((:BORG_Operator_destroy), Cvoid, (Ptr{Cvoid},), sbx_op)
